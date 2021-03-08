@@ -15,3 +15,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 prettytable-rs = "0.8"
 openssl-probe = "0.1.2"
+shakmaty = "^0.18"
