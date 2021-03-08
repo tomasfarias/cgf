@@ -6,3 +6,4 @@ pub mod cli;
 pub mod displayer;
 pub mod error;
 pub mod finder;
+pub mod utils;

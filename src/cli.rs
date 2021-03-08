@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 
 use crate::displayer::GameDisplayer;
 use crate::error::ChessError;
-use crate::finder::GameFinder;
+use crate::finder::{GameFinder, Search};
 
 pub struct ChessGameFinderCLI {
     output: String,
@@ -27,11 +27,17 @@ impl ChessGameFinderCLI {
         .author("Tomas Farias <tomas@tomasfarias.dev>")
         .about("Finds games using online chess APIs")
         .arg(
-            Arg::with_name("player")
+            Arg::with_name("player_or_id")
                 .takes_value(true)
                 .required(true)
-                .value_name("PLAYER")
-                .help("The player whose games to fetch"),
+                .value_name("PLAYER_OR_ID")
+                .help("The player whose games to fetch."),
+        )
+        .arg(
+            Arg::with_name("id")
+                .takes_value(false)
+                .long("id")
+                .help("Search by Game ID instead of player name."),
         )
         .arg(
             Arg::with_name("white")
@@ -92,10 +98,14 @@ impl ChessGameFinderCLI {
 
         let matches = app.get_matches_from_safe(args)?;
 
-        let player = matches
-            .value_of("player")
-            .expect("player argument is required");
-        let mut game_finder = GameFinder::new(player);
+        let player_or_id = matches
+            .value_of("player_or_id")
+            .expect("player or id argument is required");
+        let mut game_finder = if matches.is_present("id") {
+            GameFinder::by_id(player_or_id)
+        } else {
+            GameFinder::by_player(player_or_id)
+        };
 
         if matches.is_present("white") {
             game_finder.white();
@@ -153,9 +163,18 @@ impl ChessGameFinderCLI {
 
     pub fn run(self) -> Result<(), ChessError> {
         log::info!("Finding game");
-        let game = self.finder.find()?;
-        let displayer = GameDisplayer::from_str(game, &self.output)?;
-        println!("{}", displayer);
+        match self.finder.search {
+            Search::Player(_) => {
+                let mut game = self.finder.find_by_player()?;
+                let displayer = GameDisplayer::from_str(&mut game, &self.output)?;
+                println!("{}", displayer);
+            }
+            Search::ID(_) => {
+                let mut game = self.finder.find_by_id()?;
+                let displayer = GameDisplayer::from_str(&mut game, &self.output)?;
+                println!("{}", displayer);
+            }
+        }
 
         log::info!("Done!");
         Ok(())

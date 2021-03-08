@@ -1,9 +1,10 @@
 use std::fmt;
 
 use prettytable::Table;
+use serde::ser::Serialize;
 use serde_json;
 
-use crate::api::Game;
+use crate::api::ChessGame;
 use crate::error::ChessError;
 
 pub enum GameDisplayer {
@@ -12,7 +13,10 @@ pub enum GameDisplayer {
 }
 
 impl GameDisplayer {
-    pub fn from_str(game: Game, output: &str) -> Result<Self, ChessError> {
+    pub fn from_str(
+        game: &mut (impl ChessGame + Serialize),
+        output: &str,
+    ) -> Result<Self, ChessError> {
         match output {
             "json" => match serde_json::to_string(&game) {
                 Ok(json) => Ok(GameDisplayer::Default(json)),
@@ -22,24 +26,27 @@ impl GameDisplayer {
                 Ok(json) => Ok(GameDisplayer::Default(json)),
                 Err(e) => Err(ChessError::JSONError(e)),
             },
-            "pgn" => Ok(GameDisplayer::Default(game.pgn)),
+            "pgn" => Ok(GameDisplayer::Default(game.pgn().to_string())),
             "table" => {
                 let mut game_table = Table::new();
+                let white = game.white();
+                let black = game.black();
+
                 game_table.add_row(row![
                     "Players",
-                    format!("{} ({}) ♔", game.white.username, game.white.rating),
-                    format!("{} ({}) ♚", game.black.username, game.black.rating),
+                    format!("{} ({}) ♔", white.username, white.rating),
+                    format!("{} ({}) ♚", black.username, black.rating),
                 ]);
 
                 game_table.add_row(row![
                     "Result",
-                    format!("{}", game.white.result),
-                    format!("{}", game.black.result),
+                    format!("{}", white.result),
+                    format!("{}", black.result),
                 ]);
 
                 game_table.add_row(row![
                     "URL",
-                    H2 -> game.url,
+                    H2 -> game.url(),
                 ]);
                 Ok(GameDisplayer::Table(game_table))
             }
