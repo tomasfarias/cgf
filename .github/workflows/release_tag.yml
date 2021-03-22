@@ -35,11 +35,9 @@ jobs:
           profile: minimal
 
       - name: Build target
-        uses: actions-rs/cargo@v1
+        uses: juankaram/rust-musl-action@master
         with:
-          use-cross: ${{ matrix.job.use-cross }}
-          command: build
-          args: --release --bin cgf --target ${{ matrix.job.target }}
+          args: build --release --bin cgf --target ${{ matrix.job.target }}
 
       - name: Package
         shell: bash
