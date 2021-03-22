@@ -1,0 +1,56 @@
+name: Build and release on tag creation
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build and release for ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: macos-latest,   target: x86_64-apple-darwin,         use-cross: false }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,      use-cross: false }
+          - { os: ubuntu-latest , target: x86_64-unknown-linux-gnu,    use-cross: false }
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-musl,   use-cross: true }
+          - { os: ubuntu-latest,  target: arm-unknown-linux-gnueabihf, use-cross: true }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-gnu,   use-cross: true }
+    runs-on: ${{ matrix.job.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Build target
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: ${{ matrix.job.use-cross }}
+          command: build
+          args: --release --bin cgf --target ${{ matrix.job.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          cd target/${{ matrix.job.target }}/release
+          tar czvf ../../../cgf-${{ matrix.job.target }}.tar.gz cgf
+          cd -
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: 'cgf*'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN  }}
