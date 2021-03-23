@@ -6,10 +6,13 @@ use reqwest::Url;
 use crate::api::{CallbackLiveGame, ChessApiClient, Game};
 use crate::error::ChessError;
 
+#[derive(PartialEq, Debug)]
 pub enum Pieces {
     Black,
     White,
 }
+
+#[derive(PartialEq, Debug)]
 pub enum Search {
     Player(String),
     ID(String),
@@ -24,13 +27,14 @@ impl Search {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub struct GameFinder {
     pub search: Search,
-    pieces: Option<Pieces>,
-    year: Option<u32>,
-    month: Option<u32>,
-    day: Option<u32>,
-    opponent: Option<String>,
+    pub pieces: Option<Pieces>,
+    pub year: Option<u32>,
+    pub month: Option<u32>,
+    pub day: Option<u32>,
+    pub opponent: Option<String>,
 }
 
 impl GameFinder {
