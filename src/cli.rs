@@ -31,13 +31,13 @@ impl ChessGameFinderCLI {
                 .takes_value(true)
                 .required(true)
                 .value_name("PLAYER_OR_ID")
-                .help("The player whose games to fetch."),
+                .help("A Game ID or a player's username whose game to look for. If it contains all digits, will assume it's a Game ID unless the --player flag is used."),
         )
         .arg(
-            Arg::with_name("id")
+            Arg::with_name("player")
                 .takes_value(false)
                 .long("id")
-                .help("Search by Game ID instead of player name."),
+                .help("Force search by player username instead game ID."),
         )
         .arg(
             Arg::with_name("white")
@@ -101,11 +101,12 @@ impl ChessGameFinderCLI {
         let player_or_id = matches
             .value_of("player_or_id")
             .expect("player or id argument is required");
-        let mut game_finder = if matches.is_present("id") {
-            GameFinder::by_id(player_or_id)
-        } else {
-            GameFinder::by_player(player_or_id)
-        };
+        let mut game_finder =
+            if matches.is_present("player") || !player_or_id.chars().all(char::is_numeric) {
+                GameFinder::by_player(player_or_id)
+            } else {
+                GameFinder::by_id(player_or_id)
+            };
 
         if matches.is_present("white") {
             game_finder.white();
