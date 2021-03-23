@@ -36,7 +36,7 @@ impl ChessGameFinderCLI {
         .arg(
             Arg::with_name("player")
                 .takes_value(false)
-                .long("id")
+                .long("player")
                 .help("Force search by player username instead game ID."),
         )
         .arg(
@@ -179,5 +179,86 @@ impl ChessGameFinderCLI {
 
         log::info!("Done!");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::finder::Pieces;
+
+    #[test]
+    fn test_single_game_id() {
+        let args = vec!["cgf", "12345678910"];
+        let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
+        let finder = GameFinder {
+            search: Search::ID("12345678910".to_owned()),
+            pieces: None,
+            year: None,
+            month: None,
+            day: None,
+            opponent: None,
+        };
+        assert_eq!(cgf.finder, finder);
+    }
+
+    #[test]
+    fn test_single_player_username() {
+        let args = vec!["cgf", "a_player"];
+        let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
+        let finder = GameFinder {
+            search: Search::Player("a_player".to_owned()),
+            pieces: None,
+            year: None,
+            month: None,
+            day: None,
+            opponent: None,
+        };
+        assert_eq!(cgf.finder, finder);
+    }
+
+    #[test]
+    fn test_numeric_player_username() {
+        let args = vec!["cgf", "12345678910", "--player"];
+        let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
+        let finder = GameFinder {
+            search: Search::Player("12345678910".to_owned()),
+            pieces: None,
+            year: None,
+            month: None,
+            day: None,
+            opponent: None,
+        };
+        assert_eq!(cgf.finder, finder);
+    }
+
+    #[test]
+    fn test_white_player_username() {
+        let args = vec!["cgf", "a_player", "--white"];
+        let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
+        let finder = GameFinder {
+            search: Search::Player("a_player".to_owned()),
+            pieces: Some(Pieces::White),
+            year: None,
+            month: None,
+            day: None,
+            opponent: None,
+        };
+        assert_eq!(cgf.finder, finder);
+    }
+
+    #[test]
+    fn test_black_player_username() {
+        let args = vec!["cgf", "a_player", "--black"];
+        let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
+        let finder = GameFinder {
+            search: Search::Player("a_player".to_owned()),
+            pieces: Some(Pieces::Black),
+            year: None,
+            month: None,
+            day: None,
+            opponent: None,
+        };
+        assert_eq!(cgf.finder, finder);
     }
 }
