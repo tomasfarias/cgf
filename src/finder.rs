@@ -3,7 +3,7 @@ use log;
 use chrono::{self, DateTime, Datelike, Utc};
 use reqwest::Url;
 
-use crate::client::{CallbackLiveGame, ChessClient, Game};
+use crate::client::{Api, ChessClient, ChessGame, DisplayableChessGame};
 use crate::error::ChessError;
 
 #[derive(PartialEq, Debug)]
@@ -30,6 +30,7 @@ impl Search {
 #[derive(PartialEq, Debug)]
 pub struct GameFinder {
     pub search: Search,
+    pub api: Api,
     pub pieces: Option<Pieces>,
     pub year: Option<u32>,
     pub month: Option<u32>,
@@ -38,9 +39,10 @@ pub struct GameFinder {
 }
 
 impl GameFinder {
-    pub fn by_player(player: &str) -> Self {
+    pub fn by_player(player: &str, api: &str) -> Self {
         GameFinder {
             search: Search::Player(player.to_owned()),
+            api: Api::from_str(api).expect("Unsupported API"),
             pieces: None,
             year: None,
             month: None,
@@ -49,9 +51,10 @@ impl GameFinder {
         }
     }
 
-    pub fn by_id(id: &str) -> Self {
+    pub fn by_id(id: &str, api: &str) -> Self {
         GameFinder {
             search: Search::ID(id.to_owned()),
+            api: Api::from_str(api).expect("Unsupported API"),
             pieces: None,
             year: None,
             month: None,
@@ -107,14 +110,14 @@ impl GameFinder {
         self
     }
 
-    pub fn find_by_id(&self) -> Result<CallbackLiveGame, ChessError> {
+    pub fn find_by_id(&self) -> Result<impl DisplayableChessGame, ChessError> {
         let client = ChessClient::new(10)?;
         let id = self.search.get_value();
         log::info!("Getting game by id");
         Ok(client.get_game(&id)?)
     }
 
-    pub fn find_by_player(&self) -> Result<Game, ChessError> {
+    pub fn find_by_player(&self) -> Result<impl DisplayableChessGame, ChessError> {
         let client = ChessClient::new(10)?;
         let player = self.search.get_value();
         log::info!("Getting game archives");
@@ -157,45 +160,50 @@ impl GameFinder {
             log::info!("At {:?}/{:?}", month, year);
             let mut games = client.get_user_month_games(&player, *year as i32, *month)?;
             log::debug!("Games: {:?}", games);
-            games.sort_by_key(|g| g.end_time);
+            games.sort_by_key(|g| g.time());
 
-            let mut filtered = games
-                .iter()
-                .filter(|g| {
-                    // Filter opponent's and user's piece color
-                    match &self.pieces {
-                        Some(pieces) => match pieces {
-                            Pieces::Black => match &self.opponent {
-                                Some(o) => {
-                                    &g.black.username.to_lowercase() == player
-                                        && &g.white.username.to_lowercase() == o
-                                }
-                                None => &g.black.username.to_lowercase() == player,
-                            },
-                            Pieces::White => match &self.opponent {
-                                Some(o) => {
-                                    &g.white.username.to_lowercase() == player
-                                        && &g.black.username.to_lowercase() == o
-                                }
-                                None => &g.white.username.to_lowercase() == player,
-                            },
-                        },
-                        None => true,
-                    }
-                })
-                .filter(|g| match self.day {
-                    Some(d) => g.end_time.day() == d,
-                    None => true,
-                })
-                .cloned()
-                .collect::<Vec<Game>>();
-
-            log::debug!("Filtered games: {:?}", filtered);
-            if !filtered.is_empty() {
-                return Ok(filtered.pop().unwrap());
-            };
+            for mut game in games.into_iter() {
+                if self.check_game_found(&mut game) {
+                    return Ok(game);
+                }
+            }
         }
 
         Err(ChessError::GameNotFoundError)
+    }
+
+    fn check_game_found(&self, g: &mut impl DisplayableChessGame) -> bool {
+        self.players_had_correct_colors(g) && self.played_on_expected_day(g)
+    }
+
+    fn played_on_expected_day(&self, g: &mut impl DisplayableChessGame) -> bool {
+        match self.day {
+            Some(d) => g.time().day() == d,
+            None => true,
+        }
+    }
+
+    fn players_had_correct_colors(&self, g: &mut impl DisplayableChessGame) -> bool {
+        let player = self.search.get_value();
+
+        match &self.pieces {
+            Some(pieces) => match pieces {
+                Pieces::Black => match &self.opponent {
+                    Some(o) => {
+                        &g.black().username.to_lowercase() == player
+                            && &g.white().username.to_lowercase() == o
+                    }
+                    None => &g.black().username.to_lowercase() == player,
+                },
+                Pieces::White => match &self.opponent {
+                    Some(o) => {
+                        &g.white().username.to_lowercase() == player
+                            && &g.black().username.to_lowercase() == o
+                    }
+                    None => &g.white().username.to_lowercase() == player,
+                },
+            },
+            None => true,
+        }
     }
 }

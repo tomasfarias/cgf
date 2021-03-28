@@ -40,6 +40,16 @@ impl ChessGameFinderCLI {
                 .help("Force search by player username instead game ID."),
         )
         .arg(
+            Arg::with_name("api")
+                .long("api")
+                .short("a")
+                .takes_value(true)
+                .default_value("chess.com")
+                .possible_values(&["chess.com", "lichess.org"])
+                .required(false)
+                .help("Choose the API where to find your chess games."),
+        )
+        .arg(
             Arg::with_name("white")
                 .long("white")
                 .takes_value(false)
@@ -101,11 +111,12 @@ impl ChessGameFinderCLI {
         let player_or_id = matches
             .value_of("player_or_id")
             .expect("player or id argument is required");
+        let api = matches.value_of("api").expect("api defaults to chess.com");
         let mut game_finder =
             if matches.is_present("player") || !player_or_id.chars().all(char::is_numeric) {
-                GameFinder::by_player(player_or_id)
+                GameFinder::by_player(player_or_id, api)
             } else {
-                GameFinder::by_id(player_or_id)
+                GameFinder::by_id(player_or_id, api)
             };
 
         if matches.is_present("white") {
@@ -185,6 +196,7 @@ impl ChessGameFinderCLI {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::Api;
     use crate::finder::Pieces;
 
     #[test]
@@ -193,6 +205,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::ID("12345678910".to_owned()),
+            api: Api::ChessDotCom,
             pieces: None,
             year: None,
             month: None,
@@ -208,6 +221,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
+            api: Api::ChessDotCom,
             pieces: None,
             year: None,
             month: None,
@@ -223,6 +237,39 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("12345678910".to_owned()),
+            api: Api::ChessDotCom,
+            pieces: None,
+            year: None,
+            month: None,
+            day: None,
+            opponent: None,
+        };
+        assert_eq!(cgf.finder, finder);
+    }
+
+    #[test]
+    fn test_chess_dot_com_api_choice() {
+        let args = vec!["cgf", "a_player", "--api=chess.com"];
+        let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
+        let finder = GameFinder {
+            search: Search::Player("a_player".to_owned()),
+            api: Api::ChessDotCom,
+            pieces: None,
+            year: None,
+            month: None,
+            day: None,
+            opponent: None,
+        };
+        assert_eq!(cgf.finder, finder);
+    }
+
+    #[test]
+    fn test_lichess_dot_org_api_choice() {
+        let args = vec!["cgf", "a_player", "--api=lichess.org"];
+        let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
+        let finder = GameFinder {
+            search: Search::Player("a_player".to_owned()),
+            api: Api::LichessDotOrg,
             pieces: None,
             year: None,
             month: None,
@@ -238,6 +285,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
+            api: Api::ChessDotCom,
             pieces: Some(Pieces::White),
             year: None,
             month: None,
@@ -253,6 +301,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
+            api: Api::ChessDotCom,
             pieces: Some(Pieces::Black),
             year: None,
             month: None,
