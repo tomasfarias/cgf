@@ -4,12 +4,15 @@ use std::fmt;
 use reqwest;
 use serde_json;
 
+use crate::client;
+
 #[derive(Debug)]
 pub enum ChessError {
     GameNotFoundError,
     UnsupportedOutputError(String),
     RequestError(reqwest::Error),
     JSONError(serde_json::Error),
+    ChessClientError(client::ClientError),
 }
 
 impl fmt::Display for ChessError {
@@ -23,6 +26,7 @@ impl fmt::Display for ChessError {
                 write!(f, "JSON game serialization or deserialization failed")
             }
             ChessError::UnsupportedOutputError(out) => write!(f, "{} output is not supported", out),
+            ChessError::ChessClientError(e) => write!(f, "Chess API client failed: {}", e),
         }
     }
 }
@@ -34,6 +38,7 @@ impl error::Error for ChessError {
             ChessError::UnsupportedOutputError(_) => None,
             ChessError::JSONError(ref e) => Some(e),
             ChessError::RequestError(ref e) => Some(e),
+            ChessError::ChessClientError(ref e) => Some(e),
         }
     }
 }
@@ -41,6 +46,12 @@ impl error::Error for ChessError {
 impl From<reqwest::Error> for ChessError {
     fn from(err: reqwest::Error) -> ChessError {
         ChessError::RequestError(err)
+    }
+}
+
+impl From<client::ClientError> for ChessError {
+    fn from(err: client::ClientError) -> ChessError {
+        ChessError::ChessClientError(err)
     }
 }
 

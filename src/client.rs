@@ -2,10 +2,12 @@ use std::time::Duration;
 
 use chrono::serde::ts_seconds::deserialize as from_ts;
 use chrono::serde::ts_seconds_option::deserialize as from_ts_option;
-use chrono::{self, DateTime, Utc};
-use reqwest::{self};
+use chrono::{self, DateTime, Datelike, TimeZone, Utc};
+use reqwest::{self, blocking::Client, blocking::Request, Method, Url};
 use serde::{Deserialize, Serialize};
 use shakmaty::{fen::Fen, CastlingMode, Chess, Color, Setup};
+use thiserror::Error;
+use url;
 
 use crate::utils::next_move;
 
@@ -327,44 +329,121 @@ impl ChessGame for CallbackLiveGame {
     }
 }
 
-pub struct ChessApiClient {
-    client: reqwest::blocking::Client,
+#[derive(Error, Debug)]
+pub enum ClientError {
+    #[error("endpoint {endpoint:?} not implemented for {api:?}")]
+    EndpointNotImplemented { endpoint: String, api: String },
+    #[error("URL could not be parsed")]
+    URLParseFailed(#[from] url::ParseError),
+    #[error("HTTP Error")]
+    HTTPError(#[from] reqwest::Error),
+    #[error("Reqwest client failed to build")]
+    ClientBuildError(#[source] reqwest::Error),
 }
 
-impl ChessApiClient {
-    pub fn new(timeout: u64) -> Result<Self, reqwest::Error> {
+#[derive(PartialEq, Debug)]
+pub enum API {
+    ChessDotCom,
+    Lichess,
+}
+
+impl API {
+    pub fn game(&self, id: &str) -> Result<Request, ClientError> {
+        let url = match self {
+            API::ChessDotCom => {
+                Url::parse(&format!("https://www.chess.com/callback/live/game/{}", id))?
+            }
+            API::Lichess => Url::parse(&format!("https://lichess.org/game/export/{}", id))?,
+        };
+        Ok(Request::new(Method::GET, url))
+    }
+
+    pub fn user_archives(&self, username: &str) -> Result<Request, ClientError> {
+        match self {
+            API::ChessDotCom => {
+                let url = Url::parse(&format!(
+                    "https://api.chess.com/pub/player/{}/games/archives",
+                    username
+                ))?;
+                Ok(Request::new(Method::GET, url))
+            }
+            API::Lichess => Err(ClientError::EndpointNotImplemented {
+                endpoint: "/{user}/games/archives".to_string(),
+                api: "lichess".to_string(),
+            }),
+        }
+    }
+
+    pub fn user_games(
+        &self,
+        username: &str,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Request, ClientError> {
+        match self {
+            API::ChessDotCom => {
+                let month = from.month();
+                let year = from.year();
+                let month_str = month_string(month);
+                let url = Url::parse(&format!(
+                    "https://api.chess.com/pub/player/{}/games/{}/{}",
+                    username,
+                    year.to_string(),
+                    month_str
+                ))?;
+
+                Ok(Request::new(Method::GET, url))
+            }
+            API::Lichess => {
+                let params = [
+                    ("evals", "true"),
+                    ("pgnInJson", "true"),
+                    ("clocks", "true"),
+                    ("opening", "true"),
+                    ("since", &from.timestamp().to_string()),
+                    ("until", &to.timestamp().to_string()),
+                ];
+                let url = Url::parse_with_params(
+                    &format!("https://lichess.org/api/games/user/{}", username),
+                    &params,
+                )?;
+                Ok(Request::new(Method::GET, url))
+            }
+        }
+    }
+}
+
+pub struct ChessClient {
+    client: Client,
+    api: API,
+}
+
+impl ChessClient {
+    pub fn new(timeout: u64) -> Result<Self, ClientError> {
         let timeout = Duration::new(timeout, 0);
 
-        Ok(ChessApiClient {
-            client: reqwest::blocking::Client::builder()
+        Ok(ChessClient {
+            client: Client::builder()
                 .timeout(timeout)
-                .build()?,
+                .build()
+                .map_err(|source| ClientError::ClientBuildError(source))?,
+            api: API::ChessDotCom,
         })
     }
 
-    pub fn get_month_games(
+    pub fn get_user_month_games(
         &self,
         username: &str,
-        year: u32,
+        year: i32,
         month: u32,
-    ) -> Result<Vec<Game>, reqwest::Error> {
+    ) -> Result<Vec<Game>, ClientError> {
         log::info!("Requesting games for {} at {}/{}", username, month, year);
-        let month_string = if month < 10 {
-            let mut zero: String = "0".to_owned();
-            zero.push_str(&month.to_string());
-            zero
-        } else {
-            month.to_string()
-        };
+        let from = Utc.ymd(year, month, 1 as u32).and_hms(0, 0, 0);
+        let to = next_month(from);
 
-        let request_url = format!(
-            "https://api.chess.com/pub/player/{}/games/{}/{}",
-            username,
-            &year.to_string(),
-            &month_string,
-        );
+        let request = self.api.user_games(username, from, to)?;
 
-        let response = self.client.get(&request_url).send()?;
+        let response = self.client.execute(request)?;
         log::debug!("Response: {:?}", response);
         log::debug!(
             "Response length: {}",
@@ -375,14 +454,10 @@ impl ChessApiClient {
         Ok(games.games)
     }
 
-    pub fn get_archives(&self, username: &str) -> Result<GameArchives, reqwest::Error> {
+    pub fn get_user_game_archives(&self, username: &str) -> Result<GameArchives, ClientError> {
         log::info!("Requesting archives for {}", username);
-        let request_url = format!(
-            "https://api.chess.com/pub/player/{}/games/archives",
-            username
-        );
-
-        let response = self.client.get(&request_url).send()?;
+        let request = self.api.user_archives(username)?;
+        let response = self.client.execute(request)?;
         log::debug!("Response: {:?}", response);
         log::debug!(
             "Response length: {}",
@@ -393,11 +468,10 @@ impl ChessApiClient {
         Ok(archives)
     }
 
-    pub fn get_live_game(&self, id: &str) -> Result<CallbackLiveGame, reqwest::Error> {
+    pub fn get_game(&self, id: &str) -> Result<CallbackLiveGame, ClientError> {
         log::info!("Requesting game id {}", id);
-        let request_url = format!("https://www.chess.com/callback/live/game/{}", id);
-
-        let response = self.client.get(&request_url).send()?;
+        let request = self.api.game(id)?;
+        let response = self.client.execute(request)?;
         log::debug!("Response: {:?}", response);
         log::debug!(
             "Response length: {}",
@@ -406,5 +480,35 @@ impl ChessApiClient {
         let callback: CallbackLiveGame = response.json()?;
         log::debug!("Callback: {:?}", callback);
         Ok(callback)
+    }
+}
+
+fn month_string(m: u32) -> String {
+    if m < 10 {
+        let mut zero: String = "0".to_owned();
+        zero.push_str(&m.to_string());
+        zero
+    } else {
+        m.to_string()
+    }
+}
+
+fn next_month(d: DateTime<Utc>) -> DateTime<Utc> {
+    if d.month() == 12 {
+        Utc.ymd(d.year() + 1, 1, 1).and_hms(0, 0, 0)
+    } else {
+        Utc.ymd(d.year(), d.month() + 1, 1).and_hms(0, 0, 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_month_string() {
+        assert_eq!(month_string(10), "10".to_string());
+        assert_eq!(month_string(2), "02".to_string());
+        assert_eq!(month_string(9), "09".to_string());
     }
 }

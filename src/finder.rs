@@ -3,7 +3,7 @@ use log;
 use chrono::{self, DateTime, Datelike, Utc};
 use reqwest::Url;
 
-use crate::api::{CallbackLiveGame, ChessApiClient, Game};
+use crate::client::{CallbackLiveGame, ChessClient, Game};
 use crate::error::ChessError;
 
 #[derive(PartialEq, Debug)]
@@ -108,17 +108,17 @@ impl GameFinder {
     }
 
     pub fn find_by_id(&self) -> Result<CallbackLiveGame, ChessError> {
-        let api = ChessApiClient::new(10)?;
+        let client = ChessClient::new(10)?;
         let id = self.search.get_value();
         log::info!("Getting game by id");
-        Ok(api.get_live_game(&id)?)
+        Ok(client.get_game(&id)?)
     }
 
     pub fn find_by_player(&self) -> Result<Game, ChessError> {
-        let api = ChessApiClient::new(10)?;
+        let client = ChessClient::new(10)?;
         let player = self.search.get_value();
         log::info!("Getting game archives");
-        let game_archives = api.get_archives(&player)?;
+        let game_archives = client.get_user_game_archives(&player)?;
         log::debug!("Archives: {:?}", game_archives);
         let mut archives: Vec<(u32, u32)> = game_archives
             .archives
@@ -155,7 +155,7 @@ impl GameFinder {
         for date in archives.iter() {
             let (year, month) = date;
             log::info!("At {:?}/{:?}", month, year);
-            let mut games = api.get_month_games(&player, *year, *month)?;
+            let mut games = client.get_user_month_games(&player, *year as i32, *month)?;
             log::debug!("Games: {:?}", games);
             games.sort_by_key(|g| g.end_time);
 
