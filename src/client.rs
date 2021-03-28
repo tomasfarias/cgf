@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::time::Duration;
 
 use chrono::serde::ts_seconds::deserialize as from_ts;
@@ -70,7 +71,10 @@ pub trait ChessGame {
     fn white(&mut self) -> Player;
     fn black(&mut self) -> Player;
     fn url(&self) -> String;
+    fn time(&self) -> DateTime<Utc>;
 }
+
+pub trait DisplayableChessGame: ChessGame + Serialize + Clone + Debug {}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Game {
@@ -107,7 +111,13 @@ impl ChessGame for Game {
     fn url(&self) -> String {
         self.url.clone()
     }
+
+    fn time(&self) -> DateTime<Utc> {
+        self.end_time.clone()
+    }
 }
+
+impl DisplayableChessGame for Game {}
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Games {
@@ -207,6 +217,8 @@ pub struct CallbackLiveGame {
     pub players: LivePlayers,
     pub game: LiveGame,
 }
+
+impl DisplayableChessGame for CallbackLiveGame {}
 
 impl CallbackLiveGame {
     pub fn get_result_code(&self, color: &str) -> String {
@@ -327,6 +339,10 @@ impl ChessGame for CallbackLiveGame {
     fn url(&self) -> String {
         format!("https://www.chess.com/live/game/{}", self.game.id)
     }
+
+    fn time(&self) -> DateTime<Utc> {
+        self.game.end_time.clone()
+    }
 }
 
 #[derive(Error, Debug)]
@@ -339,35 +355,47 @@ pub enum ClientError {
     HTTPError(#[from] reqwest::Error),
     #[error("Reqwest client failed to build")]
     ClientBuildError(#[source] reqwest::Error),
+    #[error("{api:?} is not supported")]
+    UnsupportedApi { api: String },
 }
 
 #[derive(PartialEq, Debug)]
-pub enum API {
+pub enum Api {
     ChessDotCom,
-    Lichess,
+    LichessDotOrg,
 }
 
-impl API {
+impl Api {
+    pub fn from_str(s: &str) -> Result<Self, ClientError> {
+        match s {
+            "chess.com" => Ok(Api::ChessDotCom),
+            "lichess.org" => Ok(Api::LichessDotOrg),
+            api => Err(ClientError::UnsupportedApi {
+                api: api.to_string(),
+            }),
+        }
+    }
+
     pub fn game(&self, id: &str) -> Result<Request, ClientError> {
         let url = match self {
-            API::ChessDotCom => {
+            Api::ChessDotCom => {
                 Url::parse(&format!("https://www.chess.com/callback/live/game/{}", id))?
             }
-            API::Lichess => Url::parse(&format!("https://lichess.org/game/export/{}", id))?,
+            Api::LichessDotOrg => Url::parse(&format!("https://lichess.org/game/export/{}", id))?,
         };
         Ok(Request::new(Method::GET, url))
     }
 
     pub fn user_archives(&self, username: &str) -> Result<Request, ClientError> {
         match self {
-            API::ChessDotCom => {
+            Api::ChessDotCom => {
                 let url = Url::parse(&format!(
                     "https://api.chess.com/pub/player/{}/games/archives",
                     username
                 ))?;
                 Ok(Request::new(Method::GET, url))
             }
-            API::Lichess => Err(ClientError::EndpointNotImplemented {
+            Api::LichessDotOrg => Err(ClientError::EndpointNotImplemented {
                 endpoint: "/{user}/games/archives".to_string(),
                 api: "lichess".to_string(),
             }),
@@ -381,7 +409,7 @@ impl API {
         to: DateTime<Utc>,
     ) -> Result<Request, ClientError> {
         match self {
-            API::ChessDotCom => {
+            Api::ChessDotCom => {
                 let month = from.month();
                 let year = from.year();
                 let month_str = month_string(month);
@@ -394,7 +422,7 @@ impl API {
 
                 Ok(Request::new(Method::GET, url))
             }
-            API::Lichess => {
+            Api::LichessDotOrg => {
                 let params = [
                     ("evals", "true"),
                     ("pgnInJson", "true"),
@@ -415,7 +443,7 @@ impl API {
 
 pub struct ChessClient {
     client: Client,
-    api: API,
+    api: Api,
 }
 
 impl ChessClient {
@@ -427,7 +455,7 @@ impl ChessClient {
                 .timeout(timeout)
                 .build()
                 .map_err(|source| ClientError::ClientBuildError(source))?,
-            api: API::ChessDotCom,
+            api: Api::ChessDotCom,
         })
     }
 
@@ -436,10 +464,10 @@ impl ChessClient {
         username: &str,
         year: i32,
         month: u32,
-    ) -> Result<Vec<Game>, ClientError> {
+    ) -> Result<Vec<impl DisplayableChessGame>, ClientError> {
         log::info!("Requesting games for {} at {}/{}", username, month, year);
         let from = Utc.ymd(year, month, 1 as u32).and_hms(0, 0, 0);
-        let to = next_month(from);
+        let to = first_day_next_month(from);
 
         let request = self.api.user_games(username, from, to)?;
 
@@ -468,7 +496,7 @@ impl ChessClient {
         Ok(archives)
     }
 
-    pub fn get_game(&self, id: &str) -> Result<CallbackLiveGame, ClientError> {
+    pub fn get_game(&self, id: &str) -> Result<impl DisplayableChessGame, ClientError> {
         log::info!("Requesting game id {}", id);
         let request = self.api.game(id)?;
         let response = self.client.execute(request)?;
@@ -493,7 +521,7 @@ fn month_string(m: u32) -> String {
     }
 }
 
-fn next_month(d: DateTime<Utc>) -> DateTime<Utc> {
+fn first_day_next_month<D: Datelike>(d: D) -> DateTime<Utc> {
     if d.month() == 12 {
         Utc.ymd(d.year() + 1, 1, 1).and_hms(0, 0, 0)
     } else {
@@ -510,5 +538,81 @@ mod tests {
         assert_eq!(month_string(10), "10".to_string());
         assert_eq!(month_string(2), "02".to_string());
         assert_eq!(month_string(9), "09".to_string());
+    }
+
+    #[test]
+    fn test_first_day_next_month() {
+        let d = Utc.ymd(2020, 12, 1).and_hms(0, 0, 0);
+        assert_eq!(
+            first_day_next_month(d),
+            Utc.ymd(2021, 1, 1).and_hms(0, 0, 0)
+        );
+
+        let d = Utc.ymd(2020, 10, 1);
+        assert_eq!(
+            first_day_next_month(d),
+            Utc.ymd(2020, 11, 1).and_hms(0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn test_chess_dot_com_api_game_endpoint_request() {
+        let api = Api::from_str("chess.com").expect("should not break");
+        // Parsing URL should not break
+        let expected = Url::parse("https://www.chess.com/callback/live/game/101").unwrap();
+        let result = api.game("101").unwrap();
+        assert_eq!(result.url(), &expected);
+        assert_eq!(result.method(), &Method::GET);
+    }
+
+    #[test]
+    fn test_lichess_dot_org_api_game_endpoint_request() {
+        let api = Api::from_str("lichess.org").expect("should not break");
+        // Parsing URL should not break
+        let expected = Url::parse("https://lichess.org/game/export/101").unwrap();
+        let result = api.game("101").unwrap();
+        assert_eq!(result.url(), &expected);
+        assert_eq!(result.method(), &Method::GET);
+    }
+
+    #[test]
+    fn test_chess_dot_com_api_user_archives_endpoint_request() {
+        let api = Api::from_str("chess.com").expect("should not break");
+        // Parsing URL should not break
+        let expected = Url::parse("https://api.chess.com/pub/player/user1/games/archives").unwrap();
+        let result = api.user_archives("user1").unwrap();
+        assert_eq!(result.url(), &expected);
+        assert_eq!(result.method(), &Method::GET);
+    }
+
+    #[test]
+    fn test_chess_dot_com_api_user_games_endpoint_request() {
+        let api = Api::from_str("chess.com").expect("should not break");
+        let from = Utc.ymd(2020, 9, 1).and_hms(0, 0, 0);
+        let to = Utc.ymd(2020, 10, 1).and_hms(0, 0, 0);
+        // Parsing URL should not break
+        let expected = Url::parse("https://api.chess.com/pub/player/user1/games/2020/09").unwrap();
+        let result = api.user_games("user1", from, to).unwrap();
+        assert_eq!(result.url(), &expected);
+        assert_eq!(result.method(), &Method::GET);
+    }
+
+    #[test]
+    fn test_lichess_dot_org_api_user_games_endpoint_request() {
+        let api = Api::from_str("lichess.org").expect("should not break");
+        let from = Utc.ymd(2020, 9, 1).and_hms(0, 0, 0);
+        let to = Utc.ymd(2020, 10, 1).and_hms(0, 0, 0);
+        // Parsing URL should not break
+        let expected = Url::parse("https://lichess.org/api/games/user/user1?evals=true&pgnInJson=true&clocks=true&opening=true&since=1598918400&until=1601510400").unwrap();
+        let result = api.user_games("user1", from, to).unwrap();
+        assert_eq!(result.url(), &expected);
+        assert_eq!(result.method(), &Method::GET);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unsupported_api() {
+        // Assuming there will never be an "unsupported" Api variant
+        Api::from_str("unsupported").unwrap();
     }
 }
