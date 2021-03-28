@@ -4,7 +4,7 @@ use prettytable::Table;
 use serde::ser::Serialize;
 use serde_json;
 
-use crate::api::ChessGame;
+use crate::client::ChessGame;
 use crate::error::ChessError;
 
 pub enum GameDisplayer {
