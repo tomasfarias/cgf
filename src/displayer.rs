@@ -1,10 +1,8 @@
 use std::fmt;
 
 use prettytable::Table;
-use serde::ser::Serialize;
-use serde_json;
 
-use crate::client::ChessGame;
+use crate::api::{ChessPlayer, DisplayableChessGame};
 use crate::error::ChessError;
 
 pub enum GameDisplayer {
@@ -14,15 +12,15 @@ pub enum GameDisplayer {
 
 impl GameDisplayer {
     pub fn from_str(
-        game: &mut (impl ChessGame + Serialize),
+        game: &mut impl DisplayableChessGame,
         output: &str,
     ) -> Result<Self, ChessError> {
         match output {
-            "json" => match serde_json::to_string(&game) {
+            "json" => match game.to_json() {
                 Ok(json) => Ok(GameDisplayer::Default(json)),
                 Err(e) => Err(ChessError::JSONError(e)),
             },
-            "json-pretty" => match serde_json::to_string_pretty(&game) {
+            "json-pretty" => match game.to_json_pretty() {
                 Ok(json) => Ok(GameDisplayer::Default(json)),
                 Err(e) => Err(ChessError::JSONError(e)),
             },
@@ -34,15 +32,18 @@ impl GameDisplayer {
 
                 game_table.add_row(row![
                     "Players",
-                    format!("{} ({}) ♔", white.username, white.rating),
-                    format!("{} ({}) ♚", black.username, black.rating),
+                    format!("{} ({}) ♔", white.name(), white.rating()),
+                    format!("{} ({}) ♚", black.name(), black.rating()),
                 ]);
 
-                game_table.add_row(row![
-                    "Result",
-                    format!("{}", white.result),
-                    format!("{}", black.result),
-                ]);
+                if white.result().is_some() && black.result().is_some() {
+                    game_table.add_row(row![
+                        "Result",
+                        // Safe to unwrap as we have checked for is_some
+                        format!("{}", white.result().unwrap()),
+                        format!("{}", black.result().unwrap()),
+                    ]);
+                }
 
                 game_table.add_row(row![
                     "URL",

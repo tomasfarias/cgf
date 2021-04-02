@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use std::ffi::OsString;
 
 use chrono::{DateTime, Utc};
@@ -22,6 +22,8 @@ impl ChessGameFinderCLI {
         I: Iterator<Item = T>,
         T: Into<OsString> + Clone,
     {
+        let displays = &["pgn", "json-pretty", "json"];
+
         let app = App::new("Chess game finder")
         .version("0.1.0")
         .author("Tomas Farias <tomas@tomasfarias.dev>")
@@ -70,10 +72,22 @@ impl ChessGameFinderCLI {
                 .help("Output game as JSON"),
         )
         .arg(
+            Arg::with_name("json-pretty")
+                .long("json-pretty")
+                .takes_value(false)
+                .help("Output game as pretty JSON"),
+        )
+        .arg(
             Arg::with_name("pgn")
                 .long("pgn")
                 .takes_value(false)
-                .help("Output game PGN string")
+                .help("Output game PGN string"),
+        )
+        .group(
+            ArgGroup::with_name("display")
+                .args(displays)
+                .multiple(false)
+                .required(false),
         )
         .arg(
             Arg::with_name("year")
@@ -157,15 +171,14 @@ impl ChessGameFinderCLI {
             None => (),
         };
 
-        let output = if matches.is_present("json") {
-            "json"
-        } else {
-            if matches.is_present("pgn") {
-                "pgn"
-            } else {
-                "table"
+        let mut output = "table";
+
+        for display in displays {
+            if matches.is_present(display) {
+                output = display;
+                break;
             }
-        };
+        }
 
         Ok(ChessGameFinderCLI {
             output: output.to_owned(),
@@ -196,7 +209,7 @@ impl ChessGameFinderCLI {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::Api;
+    use crate::api::Api;
     use crate::finder::Pieces;
 
     #[test]
