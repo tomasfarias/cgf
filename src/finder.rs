@@ -3,7 +3,8 @@ use log;
 use chrono::{self, DateTime, Datelike, Utc};
 use reqwest::Url;
 
-use crate::client::{Api, ChessClient, ChessGame, DisplayableChessGame};
+use crate::api::{Api, ChessGame, ChessPlayer, DisplayableChessGame, Game, Games};
+use crate::client::ChessClient;
 use crate::error::ChessError;
 
 #[derive(PartialEq, Debug)]
@@ -110,14 +111,15 @@ impl GameFinder {
         self
     }
 
-    pub fn find_by_id(&self) -> Result<impl DisplayableChessGame, ChessError> {
+    pub fn find_by_id(&self) -> Result<Game, ChessError> {
         let client = ChessClient::new(10)?;
         let id = self.search.get_value();
         log::info!("Getting game by id");
-        Ok(client.get_game(&id)?)
+        let game = client.get_game(&id)?;
+        Ok(game)
     }
 
-    pub fn find_by_player(&self) -> Result<impl DisplayableChessGame, ChessError> {
+    pub fn find_by_player(&self) -> Result<Game, ChessError> {
         let client = ChessClient::new(10)?;
         let player = self.search.get_value();
         log::info!("Getting game archives");
@@ -158,15 +160,24 @@ impl GameFinder {
         for date in archives.iter() {
             let (year, month) = date;
             log::info!("At {:?}/{:?}", month, year);
-            let mut games = client.get_user_month_games(&player, *year as i32, *month)?;
-            log::debug!("Games: {:?}", games);
-            games.sort_by_key(|g| g.time());
-
-            for mut game in games.into_iter() {
-                if self.check_game_found(&mut game) {
-                    return Ok(game);
+            match client.get_user_month_games(&player, *year as i32, *month)? {
+                Games::ChessDotCom(mut v) => {
+                    v.sort_by_key(|g| g.end_time());
+                    for mut game in v.into_iter() {
+                        if self.check_game_found(&mut game) {
+                            return Ok(Game::ChessDotCom(game));
+                        }
+                    }
                 }
-            }
+                Games::LichessDotOrg(mut v) => {
+                    v.sort_by_key(|g| g.end_time());
+                    for mut game in v.into_iter() {
+                        if self.check_game_found(&mut game) {
+                            return Ok(Game::LichessDotOrg(game));
+                        }
+                    }
+                }
+            };
         }
 
         Err(ChessError::GameNotFoundError)
@@ -178,7 +189,7 @@ impl GameFinder {
 
     fn played_on_expected_day(&self, g: &mut impl DisplayableChessGame) -> bool {
         match self.day {
-            Some(d) => g.time().day() == d,
+            Some(d) => g.end_time().day() == d,
             None => true,
         }
     }
@@ -190,17 +201,17 @@ impl GameFinder {
             Some(pieces) => match pieces {
                 Pieces::Black => match &self.opponent {
                     Some(o) => {
-                        &g.black().username.to_lowercase() == player
-                            && &g.white().username.to_lowercase() == o
+                        &g.black().name().to_lowercase() == player
+                            && &g.white().name().to_lowercase() == o
                     }
-                    None => &g.black().username.to_lowercase() == player,
+                    None => &g.black().name().to_lowercase() == player,
                 },
                 Pieces::White => match &self.opponent {
                     Some(o) => {
-                        &g.white().username.to_lowercase() == player
-                            && &g.black().username.to_lowercase() == o
+                        &g.white().name().to_lowercase() == player
+                            && &g.black().name().to_lowercase() == o
                     }
-                    None => &g.white().username.to_lowercase() == player,
+                    None => &g.white().name().to_lowercase() == player,
                 },
             },
             None => true,
