@@ -209,7 +209,6 @@ impl ChessGameFinderCLI {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::Api;
     use crate::finder::Pieces;
 
     #[test]
@@ -218,7 +217,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::ID("12345678910".to_owned()),
-            api: Api::ChessDotCom,
+            api: "chess.com".to_string(),
             pieces: None,
             year: None,
             month: None,
@@ -234,7 +233,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
-            api: Api::ChessDotCom,
+            api: "chess.com".to_string(),
             pieces: None,
             year: None,
             month: None,
@@ -250,7 +249,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("12345678910".to_owned()),
-            api: Api::ChessDotCom,
+            api: "chess.com".to_string(),
             pieces: None,
             year: None,
             month: None,
@@ -266,7 +265,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
-            api: Api::ChessDotCom,
+            api: "chess.com".to_string(),
             pieces: None,
             year: None,
             month: None,
@@ -282,7 +281,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
-            api: Api::LichessDotOrg,
+            api: "lichess.org".to_string(),
             pieces: None,
             year: None,
             month: None,
@@ -298,7 +297,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
-            api: Api::ChessDotCom,
+            api: "chess.com".to_string(),
             pieces: Some(Pieces::White),
             year: None,
             month: None,
@@ -314,7 +313,7 @@ mod tests {
         let cgf = ChessGameFinderCLI::new_from(args.into_iter()).unwrap();
         let finder = GameFinder {
             search: Search::Player("a_player".to_owned()),
-            api: Api::ChessDotCom,
+            api: "chess.com".to_string(),
             pieces: Some(Pieces::Black),
             year: None,
             month: None,

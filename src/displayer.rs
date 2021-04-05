@@ -29,11 +29,12 @@ impl GameDisplayer {
                 let mut game_table = Table::new();
                 let white = game.white();
                 let black = game.black();
-
+                let white_rating = white.rating().map_or("N/A".to_string(), |i| i.to_string());
+                let black_rating = black.rating().map_or("N/A".to_string(), |i| i.to_string());
                 game_table.add_row(row![
                     "Players",
-                    format!("{} ({}) ♔", white.name(), white.rating()),
-                    format!("{} ({}) ♚", black.name(), black.rating()),
+                    format!("{} ({}) ♔", white.name(), white_rating),
+                    format!("{} ({}) ♚", black.name(), black_rating),
                 ]);
 
                 if white.result().is_some() && black.result().is_some() {
