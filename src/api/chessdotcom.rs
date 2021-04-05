@@ -30,8 +30,8 @@ impl ChessPlayer for Player {
         None
     }
 
-    fn rating(&self) -> u32 {
-        self.rating.clone()
+    fn rating(&self) -> Option<u32> {
+        Some(self.rating.clone())
     }
 
     fn url(&self) -> Option<String> {
@@ -93,8 +93,8 @@ impl ChessPlayer for LivePlayer {
         }
     }
 
-    fn rating(&self) -> u32 {
-        self.rating.clone()
+    fn rating(&self) -> Option<u32> {
+        Some(self.rating.clone())
     }
 
     fn url(&self) -> Option<String> {

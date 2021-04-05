@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use chrono::{self, DateTime, Datelike, TimeZone, Utc};
 use reqwest::{self, blocking::Client};
+use serde_json;
 use thiserror::Error;
 
 use crate::api::{self, chessdotcom, lichessdotorg, Api, Game, Games};
@@ -15,6 +16,8 @@ pub enum ClientError {
     ClientBuildError(#[source] reqwest::Error),
     #[error("There was an error with the request chess API")]
     ApiError(#[from] api::ApiError),
+    #[error("Failed to deserialize JSON response")]
+    JSONDeserializationError(#[from] serde_json::Error),
 }
 
 pub struct ChessClient {
@@ -23,7 +26,7 @@ pub struct ChessClient {
 }
 
 impl ChessClient {
-    pub fn new(timeout: u64) -> Result<Self, ClientError> {
+    pub fn new(timeout: u64, api: &str) -> Result<Self, ClientError> {
         let timeout = Duration::new(timeout, 0);
 
         Ok(ChessClient {
@@ -31,7 +34,7 @@ impl ChessClient {
                 .timeout(timeout)
                 .build()
                 .map_err(|source| ClientError::ClientBuildError(source))?,
-            api: Api::ChessDotCom,
+            api: Api::from_str(api).expect("Unsupported API"),
         })
     }
 
@@ -85,6 +88,22 @@ impl ChessClient {
         let archives: chessdotcom::GameArchives = response.json()?;
         log::debug!("Archives: {:?}", archives);
         Ok(archives)
+    }
+
+    pub fn get_last_user_game(&self, username: &str) -> Result<Game, ClientError> {
+        log::info!("Requesting last game for {}", username);
+        let request = self.api.last_user_game(username)?;
+
+        let response = self.client.execute(request)?;
+        log::debug!("Response: {:?}", response);
+        log::debug!(
+            "Response length: {}",
+            response.content_length().unwrap_or(0 as u64)
+        );
+        let text = response.text()?;
+        log::debug!("Response text: {}", text);
+        let game: lichessdotorg::Game = serde_json::from_str(&text)?;
+        Ok(Game::LichessDotOrg(game))
     }
 
     pub fn get_game(&self, id: &str) -> Result<Game, ClientError> {

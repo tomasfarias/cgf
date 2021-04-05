@@ -69,29 +69,45 @@ pub struct Players {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all(deserialize = "camelCase"))]
 pub struct Player {
-    pub user: User,
-    pub rating: u32,
-    pub rating_diff: i32,
+    // Fields may be missing if user is anonymous
+    pub user: Option<User>,
+    pub rating: Option<u32>,
+    pub rating_diff: Option<i32>,
 }
 
 impl ChessPlayer for Player {
     fn name(&self) -> String {
-        self.user.name.clone()
-    }
-
-    fn title(&self) -> Option<String> {
-        match &self.user.title {
-            Some(t) => Some(t.clone()),
-            None => None,
+        match &self.user {
+            Some(u) => u.name.clone(),
+            None => "Anonymous".to_string(),
         }
     }
 
-    fn rating(&self) -> u32 {
-        self.rating.clone()
+    fn title(&self) -> Option<String> {
+        if let Some(u) = &self.user {
+            match &u.title {
+                Some(t) => Some(t.clone()),
+                None => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    fn rating(&self) -> Option<u32> {
+        if let Some(r) = self.rating {
+            Some(r.clone())
+        } else {
+            None
+        }
     }
 
     fn url(&self) -> Option<String> {
-        Some(format!("https://lichess.org/@/{}", self.user.id))
+        if let Some(u) = &self.user {
+            Some(format!("https://lichess.org/@/{}", u.id))
+        } else {
+            None
+        }
     }
 
     fn result(&self) -> Option<String> {

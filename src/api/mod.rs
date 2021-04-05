@@ -12,7 +12,7 @@ pub mod lichessdotorg;
 pub trait ChessPlayer {
     fn name(&self) -> String;
     fn title(&self) -> Option<String>;
-    fn rating(&self) -> u32;
+    fn rating(&self) -> Option<u32>;
     fn url(&self) -> Option<String>;
     fn result(&self) -> Option<String>;
 }
@@ -65,7 +65,7 @@ impl ChessPlayer for Player {
         }
     }
 
-    fn rating(&self) -> u32 {
+    fn rating(&self) -> Option<u32> {
         match self {
             Player::ChessDotCom(p) => p.rating(),
             Player::ChessDotComLive(p) => p.rating(),
@@ -189,13 +189,28 @@ impl Api {
     }
 
     pub fn game(&self, id: &str) -> Result<Request, ApiError> {
-        let url = match self {
+        match self {
             Api::ChessDotCom => {
-                Url::parse(&format!("https://www.chess.com/callback/live/game/{}", id))?
+                let url = Url::parse(&format!("https://www.chess.com/callback/live/game/{}", id))?;
+                Ok(Request::new(Method::GET, url))
             }
-            Api::LichessDotOrg => Url::parse(&format!("https://lichess.org/game/export/{}", id))?,
-        };
-        Ok(Request::new(Method::GET, url))
+            Api::LichessDotOrg => {
+                let params = [
+                    ("evals", "true"),
+                    ("pgnInJson", "true"),
+                    ("clocks", "true"),
+                    ("opening", "true"),
+                ];
+                let url = Url::parse_with_params(
+                    &format!("https://lichess.org/game/export/{}", id),
+                    &params,
+                )?;
+                let mut req = Request::new(Method::GET, url);
+                let headers = req.headers_mut();
+                headers.insert(reqwest::header::ACCEPT, "application/json".parse().unwrap());
+                Ok(req)
+            }
+        }
     }
 
     pub fn user_archives(&self, username: &str) -> Result<Request, ApiError> {
@@ -209,7 +224,7 @@ impl Api {
             }
             Api::LichessDotOrg => Err(ApiError::EndpointNotImplemented {
                 endpoint: "/{user}/games/archives".to_string(),
-                api: "lichess".to_string(),
+                api: "lichess.org".to_string(),
             }),
         }
     }
@@ -247,7 +262,42 @@ impl Api {
                     &format!("https://lichess.org/api/games/user/{}", username),
                     &params,
                 )?;
-                Ok(Request::new(Method::GET, url))
+                let mut req = Request::new(Method::GET, url);
+                let headers = req.headers_mut();
+                headers.insert(
+                    reqwest::header::ACCEPT,
+                    "application/x-ndjson".parse().unwrap(),
+                );
+                Ok(req)
+            }
+        }
+    }
+
+    pub fn last_user_game(&self, username: &str) -> Result<Request, ApiError> {
+        match self {
+            Api::ChessDotCom => Err(ApiError::EndpointNotImplemented {
+                endpoint: "/{user}/games/archives".to_string(),
+                api: "chess.com".to_string(),
+            }),
+            Api::LichessDotOrg => {
+                let params = [
+                    ("evals", "true"),
+                    ("pgnInJson", "true"),
+                    ("clocks", "true"),
+                    ("opening", "true"),
+                    ("max", "1"),
+                ];
+                let url = Url::parse_with_params(
+                    &format!("https://lichess.org/api/games/user/{}", username),
+                    &params,
+                )?;
+                let mut req = Request::new(Method::GET, url);
+                let headers = req.headers_mut();
+                headers.insert(
+                    reqwest::header::ACCEPT,
+                    "application/x-ndjson".parse().unwrap(),
+                );
+                Ok(req)
             }
         }
     }
@@ -290,7 +340,14 @@ mod tests {
     fn test_lichess_dot_org_api_game_endpoint_request() {
         let api = Api::from_str("lichess.org").expect("should not break");
         // Parsing URL should not break
-        let expected = Url::parse("https://lichess.org/game/export/101").unwrap();
+        let params = [
+            ("evals", "true"),
+            ("pgnInJson", "true"),
+            ("clocks", "true"),
+            ("opening", "true"),
+        ];
+        let expected =
+            Url::parse_with_params("https://lichess.org/game/export/101", &params).unwrap();
         let result = api.game("101").unwrap();
         assert_eq!(result.url(), &expected);
         assert_eq!(result.method(), &Method::GET);

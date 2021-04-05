@@ -3,7 +3,9 @@ use log;
 use chrono::{self, DateTime, Datelike, Utc};
 use reqwest::Url;
 
-use crate::api::{Api, ChessGame, ChessPlayer, DisplayableChessGame, Game, Games};
+use crate::api::{
+    chessdotcom::GameArchives, ChessGame, ChessPlayer, DisplayableChessGame, Game, Games,
+};
 use crate::client::ChessClient;
 use crate::error::ChessError;
 
@@ -31,7 +33,7 @@ impl Search {
 #[derive(PartialEq, Debug)]
 pub struct GameFinder {
     pub search: Search,
-    pub api: Api,
+    pub api: String,
     pub pieces: Option<Pieces>,
     pub year: Option<u32>,
     pub month: Option<u32>,
@@ -43,7 +45,7 @@ impl GameFinder {
     pub fn by_player(player: &str, api: &str) -> Self {
         GameFinder {
             search: Search::Player(player.to_owned()),
-            api: Api::from_str(api).expect("Unsupported API"),
+            api: api.to_owned(),
             pieces: None,
             year: None,
             month: None,
@@ -55,7 +57,7 @@ impl GameFinder {
     pub fn by_id(id: &str, api: &str) -> Self {
         GameFinder {
             search: Search::ID(id.to_owned()),
-            api: Api::from_str(api).expect("Unsupported API"),
+            api: api.to_owned(),
             pieces: None,
             year: None,
             month: None,
@@ -112,7 +114,7 @@ impl GameFinder {
     }
 
     pub fn find_by_id(&self) -> Result<Game, ChessError> {
-        let client = ChessClient::new(10)?;
+        let client = ChessClient::new(10, &self.api)?;
         let id = self.search.get_value();
         log::info!("Getting game by id");
         let game = client.get_game(&id)?;
@@ -120,12 +122,45 @@ impl GameFinder {
     }
 
     pub fn find_by_player(&self) -> Result<Game, ChessError> {
-        let client = ChessClient::new(10)?;
+        let client = ChessClient::new(10, &self.api)?;
         let player = self.search.get_value();
-        log::info!("Getting game archives");
-        let game_archives = client.get_user_game_archives(&player)?;
-        log::debug!("Archives: {:?}", game_archives);
-        let mut archives: Vec<(u32, u32)> = game_archives
+        match self.api.as_str() {
+            "chess.com" => {
+                log::info!("Getting game archives");
+                let game_archives = client.get_user_game_archives(&player)?;
+                let archives: Vec<(u32, u32)> = self.year_month_archives(game_archives);
+
+                log::info!("Looking for game, iterating through archives.");
+                for date in archives.iter() {
+                    let (year, month) = date;
+                    log::info!("At {:?}/{:?}", month, year);
+
+                    match client.get_user_month_games(&player, *year as i32, *month)? {
+                        Games::ChessDotCom(mut v) => {
+                            v.sort_by_key(|g| g.end_time());
+                            for mut game in v.into_iter() {
+                                if self.check_game_found(&mut game) {
+                                    return Ok(Game::ChessDotCom(game));
+                                }
+                            }
+                        }
+                        _ => panic!("Should never happen"),
+                    }
+                }
+            }
+            "lichess.org" => {
+                log::info!("Getting user games");
+                let game = client.get_last_user_game(&player)?;
+                return Ok(game);
+            }
+            a => panic!("Unsupported API: {}", a),
+        };
+
+        Err(ChessError::GameNotFoundError)
+    }
+
+    fn year_month_archives(&self, game_archives: GameArchives) -> Vec<(u32, u32)> {
+        let mut archives = game_archives
             .archives
             .iter()
             .map(|s| Url::parse(s))
@@ -155,32 +190,7 @@ impl GameFinder {
             .collect::<Vec<(u32, u32)>>();
 
         archives.reverse();
-
-        log::info!("Looking for game, iterating through archives.");
-        for date in archives.iter() {
-            let (year, month) = date;
-            log::info!("At {:?}/{:?}", month, year);
-            match client.get_user_month_games(&player, *year as i32, *month)? {
-                Games::ChessDotCom(mut v) => {
-                    v.sort_by_key(|g| g.end_time());
-                    for mut game in v.into_iter() {
-                        if self.check_game_found(&mut game) {
-                            return Ok(Game::ChessDotCom(game));
-                        }
-                    }
-                }
-                Games::LichessDotOrg(mut v) => {
-                    v.sort_by_key(|g| g.end_time());
-                    for mut game in v.into_iter() {
-                        if self.check_game_found(&mut game) {
-                            return Ok(Game::LichessDotOrg(game));
-                        }
-                    }
-                }
-            };
-        }
-
-        Err(ChessError::GameNotFoundError)
+        archives
     }
 
     fn check_game_found(&self, g: &mut impl DisplayableChessGame) -> bool {
