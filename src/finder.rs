@@ -138,6 +138,7 @@ impl GameFinder {
                     match client.get_user_month_games(&player, *year as i32, *month)? {
                         Games::ChessDotCom(mut v) => {
                             v.sort_by_key(|g| g.end_time());
+                            v.reverse();
                             for mut game in v.into_iter() {
                                 if self.check_game_found(&mut game) {
                                     return Ok(Game::ChessDotCom(game));
@@ -160,7 +161,7 @@ impl GameFinder {
     }
 
     fn year_month_archives(&self, game_archives: GameArchives) -> Vec<(u32, u32)> {
-        let archives = game_archives
+        let mut archives = game_archives
             .archives
             .iter()
             .map(|s| Url::parse(s))
@@ -188,7 +189,7 @@ impl GameFinder {
                 },
             })
             .collect::<Vec<(u32, u32)>>();
-
+        archives.reverse();
         archives
     }
 
