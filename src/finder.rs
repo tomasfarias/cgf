@@ -160,7 +160,7 @@ impl GameFinder {
     }
 
     fn year_month_archives(&self, game_archives: GameArchives) -> Vec<(u32, u32)> {
-        let mut archives = game_archives
+        let archives = game_archives
             .archives
             .iter()
             .map(|s| Url::parse(s))
@@ -189,7 +189,6 @@ impl GameFinder {
             })
             .collect::<Vec<(u32, u32)>>();
 
-        archives.reverse();
         archives
     }
 
