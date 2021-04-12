@@ -323,23 +323,51 @@ impl ChessGame for CallbackLiveGame {
 
         let mut counter = 1;
         let mut pgn = String::new();
+        // This next loop should probably be handled by some iter implemenation
         let mut moves: Vec<char> = self.game.move_list.chars().rev().collect();
+        let mut timestamps: Vec<u32> = self
+            .game
+            .move_timestamps
+            .split(",")
+            .map(|s| s.parse::<u32>().unwrap())
+            .collect();
+        timestamps.reverse();
 
         pgn.push_str(&self.game.pgn_headers.to_pgn_string());
         loop {
             let m = next_move(&mut moves, &mut position);
-
             if m.is_none() {
                 break;
             }
 
-            if position.turn() == Color::Black {
+            let ts = timestamps.pop().unwrap();
+            let seconds = if ts % 60 < 10 {
+                format!("0{}", ts % 60)
+            } else {
+                format!("{}", ts % 60)
+            };
+            let minutes = if (ts / 60) % 60 < 10 {
+                format!("0{}", (ts / 60) % 60)
+            } else {
+                format!("{}", (ts / 60) % 60)
+            };
+            let hours = ts / 60 / 60;
+            let clock_comment = format!(" {{[%clk {}:{}:{}]}} ", hours, minutes, seconds);
+
+            // Next position.turn() returns the next player to move, not the player that made
+            // the current move m
+            if position.turn() == Color::White {
                 pgn.push_str(&counter.to_string());
-                pgn.push('.');
+                pgn.push_str("... ");
+                pgn.push_str(&m.unwrap());
+                pgn.push_str(&clock_comment);
                 counter += 1;
+            } else {
+                pgn.push_str(&counter.to_string());
+                pgn.push_str(". ");
+                pgn.push_str(&m.unwrap());
+                pgn.push_str(&clock_comment);
             }
-            pgn.push_str(&m.unwrap());
-            pgn.push(' ');
         }
 
         pgn.push_str(&self.game.pgn_headers.result);
