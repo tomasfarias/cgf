@@ -84,6 +84,35 @@ pub fn next_move<P: Position>(moves: &mut Vec<char>, position: &mut P) -> Option
                 }
             }
         }
+        Role::Pawn => {
+            if i8::abs(index_start as i8 - index_end as i8) % 8 != 0 {
+                // Pawn did not move forward, it must have captured something
+                if piece_end_role.is_none() {
+                    // Holy Hell!
+                    Move::EnPassant {
+                        from: square_start,
+                        to: square_end,
+                    }
+                } else {
+                    Move::Normal {
+                        role: piece_start,
+                        from: square_start,
+                        capture: piece_end_role,
+                        to: square_end,
+                        promotion: promotion,
+                    }
+                }
+            } else {
+                // Pawns cannot capture forward
+                Move::Normal {
+                    role: piece_start,
+                    from: square_start,
+                    capture: None,
+                    to: square_end,
+                    promotion: promotion,
+                }
+            }
+        }
         _ => Move::Normal {
             role: piece_start,
             from: square_start,
@@ -274,5 +303,26 @@ mod tests {
 
         let castle = next_move(&mut moves, &mut position);
         assert_eq!(castle, Some("e1=N".to_string()));
+    }
+
+    #[test]
+    fn test_next_move_en_passant() {
+        let mut moves: Vec<char> = vec!['R', 'K', 'J', 'Z'];
+        let fen_str = b"rn1qk1nr/pbppbppp/1p2p3/4P3/2BP4/5N2/PPP2PPP/RNBQK2R b KQkq - 2 5";
+        let mut position: Chess = Fen::from_ascii(fen_str)
+            .unwrap()
+            .position(CastlingMode::Standard)
+            .unwrap();
+
+        let d5 = next_move(&mut moves, &mut position);
+        assert_eq!(d5, Some("d5".to_string()));
+        assert_eq!(moves, vec!['R', 'K']);
+
+        let exd6 = next_move(&mut moves, &mut position);
+        assert_eq!(exd6, Some("exd6".to_string()));
+        assert_eq!(moves, Vec::<char>::new());
+
+        let no_moves = next_move(&mut moves, &mut position);
+        assert_eq!(no_moves, None);
     }
 }
