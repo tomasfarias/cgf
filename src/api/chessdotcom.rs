@@ -209,19 +209,19 @@ pub struct PGNHeaders {
 impl PGNHeaders {
     pub fn to_pgn_string(&self) -> String {
         let mut headers = String::new();
-        headers.push_str(&format!("[Event {}]\n", self.event));
-        headers.push_str(&format!("[Site {}]\n", self.site));
-        headers.push_str(&format!("[Date {}]\n", self.date));
-        headers.push_str(&format!("[White {}]\n", self.white));
-        headers.push_str(&format!("[Black {}]\n", self.black));
-        headers.push_str(&format!("[Result {}]\n", self.result));
-        headers.push_str(&format!("[CurrentPosition {}]\n", self.fen));
-        headers.push_str(&format!("[ECO {}]\n", self.eco));
-        headers.push_str(&format!("[WhiteElo {}]\n", self.white_elo));
-        headers.push_str(&format!("[BlackElo {}]\n", self.black_elo));
-        headers.push_str(&format!("[TimeControl {}]\n", self.time_control));
-        headers.push_str(&format!("[EndTime {}]\n", self.end_time));
-        headers.push_str(&format!("[Termination {}]\n\n", self.termination));
+        headers.push_str(&format!("[Event \"{}\"]\n", self.event));
+        headers.push_str(&format!("[Site \"{}\"]\n", self.site));
+        headers.push_str(&format!("[Date \"{}\"]\n", self.date));
+        headers.push_str(&format!("[White \"{}\"]\n", self.white));
+        headers.push_str(&format!("[Black \"{}\"]\n", self.black));
+        headers.push_str(&format!("[Result \"{}\"]\n", self.result));
+        headers.push_str(&format!("[CurrentPosition \"{}\"]\n", self.fen));
+        headers.push_str(&format!("[ECO \"{}\"]\n", self.eco));
+        headers.push_str(&format!("[WhiteElo \"{}\"]\n", self.white_elo));
+        headers.push_str(&format!("[BlackElo \"{}\"]\n", self.black_elo));
+        headers.push_str(&format!("[TimeControl \"{}\"]\n", self.time_control));
+        headers.push_str(&format!("[EndTime \"{}\"]\n", self.end_time));
+        headers.push_str(&format!("[Termination \"{}\"]\n\n", self.termination));
         headers
     }
 }
