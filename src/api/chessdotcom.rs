@@ -341,18 +341,11 @@ impl ChessGame for CallbackLiveGame {
             }
 
             let ts = timestamps.pop().unwrap();
-            let seconds = if ts % 60 < 10 {
-                format!("0{}", ts % 60)
-            } else {
-                format!("{}", ts % 60)
-            };
-            let minutes = if (ts / 60) % 60 < 10 {
-                format!("0{}", (ts / 60) % 60)
-            } else {
-                format!("{}", (ts / 60) % 60)
-            };
-            let hours = ts / 60 / 60;
-            let clock_comment = format!(" {{[%clk {}:{}:{}]}} ", hours, minutes, seconds);
+            let (hours, minutes, secs, tenth_secs) = time_from_timestamp(ts);
+            let clock_comment = format!(
+                " {{[%clk {}:{:02}:{:02}.{:01}]}} ",
+                hours, minutes, secs, tenth_secs
+            );
 
             // Next position.turn() returns the next player to move, not the player that made
             // the current move m
@@ -398,4 +391,49 @@ impl ChessGame for CallbackLiveGame {
     }
 }
 
+/// Turn a chess.com timestamp into hours, minutes, seconds, and tenths of a second
+fn time_from_timestamp(ts: u32) -> (u32, u32, u32, u32) {
+    let tenth_secs = ts % 10;
+    let mut secs = ts / 10;
+    let mut minutes = secs / 60;
+    let hours = minutes / 60;
+
+    secs -= minutes * 60;
+    minutes -= hours * 60;
+
+    (hours, minutes, secs, tenth_secs)
+}
+
 impl DisplayableChessGame for CallbackLiveGame {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_time_from_timestamp() {
+        let timestamp = 599;
+        let (hours, minutes, secs, tenth_secs) = time_from_timestamp(timestamp);
+
+        assert_eq!(hours, 0);
+        assert_eq!(minutes, 0);
+        assert_eq!(secs, 59);
+        assert_eq!(tenth_secs, 9);
+
+        let timestamp = 1800;
+        let (hours, minutes, secs, tenth_secs) = time_from_timestamp(timestamp);
+
+        assert_eq!(hours, 0);
+        assert_eq!(minutes, 3);
+        assert_eq!(secs, 0);
+        assert_eq!(tenth_secs, 0);
+
+        let timestamp = 1086;
+        let (hours, minutes, secs, tenth_secs) = time_from_timestamp(timestamp);
+
+        assert_eq!(hours, 0);
+        assert_eq!(minutes, 1);
+        assert_eq!(secs, 48);
+        assert_eq!(tenth_secs, 6);
+    }
+}
