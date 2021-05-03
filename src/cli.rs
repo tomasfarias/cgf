@@ -25,7 +25,7 @@ impl ChessGameFinderCLI {
         let displays = &["pgn", "json-pretty", "json"];
 
         let app = App::new("Chess game finder")
-        .version("0.3.3")
+        .version("0.3.4")
         .author("Tomas Farias <tomas@tomasfarias.dev>")
         .about("Finds games using online chess APIs")
         .arg(
