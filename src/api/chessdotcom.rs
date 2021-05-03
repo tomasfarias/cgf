@@ -249,8 +249,8 @@ pub struct LiveGame {
     pub last_move: String,
     pub move_list: String,
     pub ply_count: i32,
-    pub rating_change_white: i32,
-    pub rating_change_black: i32,
+    pub rating_change_white: Option<i32>,
+    pub rating_change_black: Option<i32>,
     pub result_message: String,
     #[serde(deserialize_with = "from_ts")]
     pub end_time: DateTime<Utc>,
