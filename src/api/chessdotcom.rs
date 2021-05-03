@@ -207,7 +207,7 @@ pub struct PGNHeaders {
 }
 
 impl PGNHeaders {
-    pub fn to_pgn_string(&self) -> String {
+    pub fn to_pgn_string(&self, id: &str) -> String {
         let mut headers = String::new();
         headers.push_str(&format!("[Event \"{}\"]\n", self.event));
         headers.push_str(&format!("[Site \"{}\"]\n", self.site));
@@ -221,7 +221,11 @@ impl PGNHeaders {
         headers.push_str(&format!("[BlackElo \"{}\"]\n", self.black_elo));
         headers.push_str(&format!("[TimeControl \"{}\"]\n", self.time_control));
         headers.push_str(&format!("[EndTime \"{}\"]\n", self.end_time));
-        headers.push_str(&format!("[Termination \"{}\"]\n\n", self.termination));
+        headers.push_str(&format!("[Termination \"{}\"]\n", self.termination));
+        headers.push_str(&format!(
+            "[Link \"https://www.chess.com/game/live/{}\"]\n\n",
+            id
+        ));
         headers
     }
 }
@@ -333,7 +337,12 @@ impl ChessGame for CallbackLiveGame {
             .collect();
         timestamps.reverse();
 
-        pgn.push_str(&self.game.pgn_headers.to_pgn_string());
+        pgn.push_str(
+            &self
+                .game
+                .pgn_headers
+                .to_pgn_string(&self.game.id.to_string()),
+        );
         loop {
             let m = next_move(&mut moves, &mut position);
             if m.is_none() {
